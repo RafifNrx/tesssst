@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tracking Link Generator & Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+  body {
+    margin: 0;
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+  }
+  h1 {
+    margin-bottom: 0.3rem;
+    font-weight: 600;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  h2 {
+    margin-top: 2rem;
+    font-weight: 600;
+    border-bottom: 2px solid rgba(255,255,255,0.3);
+    padding-bottom: 0.3rem;
+  }
+  form {
+    background: rgba(255,255,255,0.1);
+    padding: 1rem 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    max-width: 400px;
+    width: 100%;
+    margin-bottom: 2rem;
+  }
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+  input[type="text"] {
+    padding: 0.6rem;
+    width: 100%;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+  button {
+    background-color: #ff6f61;
+    border: none;
+    padding: 0.7rem 1.4rem;
+    border-radius: 6px;
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    width: 100%;
+  }
+  button:hover {
+    background-color: #e65b50;
+  }
+  #generatedLink {
+    word-break: break-all;
+    background-color: rgba(255,255,255,0.15);
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    margin-top: 0.6rem;
+    user-select: all;
+  }
+  #trackingLog {
+    max-width: 700px;
+    background: rgba(255,255,255,0.1);
+    padding: 1rem;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    color: white;
+  }
+  th, td {
+    padding: 0.8rem 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    text-align: left;
+    font-size: 0.9rem;
+  }
+  th {
+    background: rgba(255,255,255,0.2);
+    font-weight: 700;
+  }
+  tr:hover {
+    background: rgba(255,255,255,0.15);
+  }
+  .info {
+    font-size: 0.9rem;
+    margin-top: 1rem;
+    opacity: 0.9;
+  }
+  .link-section {
+    margin-bottom: 3rem;
+  }
+  a {
+    color: #ffa8a8;
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<h1>Tracking Link Generator</h1>
+<div id="appContent">
+  <div class="link-section" id="createLinkSection">
+    <form id="linkForm">
+      <label for="linkName">Enter a name for your tracking link:</label>
+      <input type="text" id="linkName" name="linkName" placeholder="Example: summer-campaign" required pattern="[a-zA-Z0-9\-]+"
+        title="Only letters, numbers, and hyphens allowed" autocomplete="off" />
+      <button type="submit">Generate Tracking Link</button>
+      <div id="generatedLink" style="display:none"></div>
+    </form>
+    <div class="info">
+      Your tracking links will capture approximate location of visitors based on their IP, without asking for location permission.
+    </div>
+  </div>
+
+  <div class="link-section" id="trackingLogSection" style="display:none">
+    <h2>Tracking Log for <span id="currentLinkId"></span></h2>
+    <button id="backToCreate" style="margin-bottom: 1rem; background:#555;">Back to Link Generator</button>
+    <div id="trackingLog">
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>IP</th>
+            <th>City</th>
+            <th>Region</th>
+            <th>Country</th>
+            <th>ISP</th>
+          </tr>
+        </thead>
+        <tbody id="logTableBody"></tbody>
+      </table>
+    </div>
+    <div id="noLogsMsg" style="margin-top:1rem; font-style: italic; opacity: 0.8; display:none;">No tracking data yet for this link.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const baseUrl = window.location.origin + window.location.pathname;
+  const linkForm = document.getElementById('linkForm');
+  const inputName = document.getElementById('linkName');
+  const generatedLinkDiv = document.getElementById('generatedLink');
+  const trackingLogSection = document.getElementById('trackingLogSection');
+  const createLinkSection = document.getElementById('createLinkSection');
+  const logTableBody = document.getElementById('logTableBody');
+  const currentLinkIdSpan = document.getElementById('currentLinkId');
+  const backToCreateBtn = document.getElementById('backToCreate');
+  const noLogsMsg = document.getElementById('noLogsMsg');
+
+  function saveVisit(id, visitData) {
+    const allData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+    if (!allData[id]) allData[id] = [];
+    allData[id].push(visitData);
+    localStorage.setItem('trackingData', JSON.stringify(allData));
+  }
+
+  function getVisits(id) {
+    const allData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+    return allData[id] || [];
+  }
+
+  function buildTrackingUrl(id) {
+    return baseUrl + '?id=' + encodeURIComponent(id);
+  }
+
+  function showGeneratedLink(id) {
+    const url = buildTrackingUrl(id);
+    generatedLinkDiv.innerHTML = 'Tracking Link: <a href="' + url + '" target="_blank" rel="noopener">' + url + '</a>';
+    generatedLinkDiv.style.display = 'block';
+  }
+
+  function renderLogTable(id) {
+    currentLinkIdSpan.textContent = id;
+    const visits = getVisits(id);
+    logTableBody.innerHTML = '';
+    if (visits.length === 0) {
+      noLogsMsg.style.display = 'block';
+      return;
+    } else {
+      noLogsMsg.style.display = 'none';
+    }
+    visits.forEach(v => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${new Date(v.timestamp).toLocaleString()}</td>
+        <td>${v.query.ip || 'Unknown'}</td>
+        <td>${v.query.city || 'Unknown'}</td>
+        <td>${v.query.regionName || 'Unknown'}</td>
+        <td>${v.query.country || 'Unknown'}</td>
+        <td>${v.query.isp || 'Unknown'}</td>
+      `;
+      logTableBody.appendChild(tr);
+    });
+  }
+
+  function showTrackingLog(id) {
+    createLinkSection.style.display = 'none';
+    trackingLogSection.style.display = 'block';
+    renderLogTable(id);
+  }
+
+  function showCreationSection() {
+    createLinkSection.style.display = 'block';
+    trackingLogSection.style.display = 'none';
+    generatedLinkDiv.style.display = 'none';
+    inputName.value = '';
+  }
+
+  linkForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const val = inputName.value.trim();
+    if (!val) return alert('Please enter a name for the tracking link.');
+    // Save empty array for new link if not exists
+    const allData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+    if (allData[val]) {
+      if (!confirm('A link with this name already exists. Show its tracking log?')) {
+        return;
+      }
+      showTrackingLog(val);
+      return;
+    }
+    allData[val] = [];
+    localStorage.setItem('trackingData', JSON.stringify(allData));
+    showGeneratedLink(val);
+  });
+
+  backToCreateBtn.addEventListener('click', () => {
+    showCreationSection();
+  });
+
+  // Handle visiting a tracking URL with ?id=...
+  function handleTrackingVisit(id) {
+    // Use ip-api.com json endpoint to get visitor location info
+    fetch('https://ip-api.com/json/?fields=status,message,country,regionName,city,query,isp')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'fail') {
+          console.warn('IP Geolocation failed:', data.message);
+        }
+        // Save visit data with timestamp
+        const visitData = { query: data, timestamp: Date.now() };
+        // Use localStorage only if the link id exists in localStorage
+        const allData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+        if (!allData[id]) {
+          // First time seen on this browser - initialize empty array
+          allData[id] = [];
+        }
+        allData[id].push(visitData);
+        localStorage.setItem('trackingData', JSON.stringify(allData));
+
+        // Show a visitor page with location info
+        document.body.innerHTML = `
+          <div style="max-width:400px;margin:4rem auto;padding:2rem;background:rgba(255,255,255,0.1);border-radius:12px;text-align:center;color:#fff; font-family: 'Poppins', sans-serif;">
+            <h1>Thanks for visiting!</h1>
+            <p style="font-size:1.1rem; margin:1rem 0 0.5rem 0;">Approximate Location Found:</p>
+            <p style="font-weight: 600; font-size:1.4rem;">
+              ${data.city || 'Unknown City'}, ${data.regionName || 'Unknown Region'}<br />
+              ${data.country || 'Unknown Country'}
+            </p>
+            <p style="font-size:0.9rem;opacity:0.8;margin-top:1rem;">Your IP: ${data.query || 'Unknown'}</p>
+          </div>
+        `;
+      })
+      .catch(err => {
+        console.error('Failed to fetch IP location', err);
+        document.body.innerHTML = '<h2 style="color:white;text-align:center;margin-top:4rem;">Failed to retrieve location data.</h2>';
+      });
+  }
+
+  // Initialization: Check URL param ?id=
+  const urlParams = new URLSearchParams(window.location.search);
+  const trackingId = urlParams.get('id');
+  if (trackingId) {
+    // If visited as tracking URL, handle visitor logging & show info
+    handleTrackingVisit(trackingId);
+  } else {
+    // Otherwise, show the creator interface
+    showCreationSection();
+  }
+})();
+</script>
+</body>
+</html>
+
